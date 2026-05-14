@@ -1,7 +1,16 @@
-const NODE_WIDTH = 200;
-const NODE_HEIGHT = 90;
-const H_GAP = 40;
-const V_GAP = 80;
+const NODE_WIDTH = 240;
+const NODE_HEIGHT = 130;
+const H_GAP = 54;
+const V_GAP = 88;
+
+function parseRouteOption(route) {
+  const normalized = `${route || ''}`.trim();
+  if (!normalized) return null;
+  const match = normalized.match(/[1-9]/);
+  if (!match) return null;
+  const value = Number(match[0]);
+  return Number.isInteger(value) && value >= 1 && value <= 9 ? value : null;
+}
 
 // Compute the minimum subtree width needed for a node and its descendants
 function subtreeWidth(id, childrenMap) {
@@ -30,11 +39,13 @@ function assignPositions(id, x, y, childrenMap, positions) {
   }
 }
 
-export function buildLayout(contacts) {
+export function buildLayout(blocks) {
   const childrenMap = new Map();
+  const insertionOrder = new Map();
   const roots = [];
 
-  for (const c of contacts) {
+  for (const [index, c] of blocks.entries()) {
+    insertionOrder.set(c.id, index);
     if (!childrenMap.has(c.id)) childrenMap.set(c.id, []);
     if (c.parentId === null) {
       roots.push(c);
@@ -44,13 +55,36 @@ export function buildLayout(contacts) {
     }
   }
 
+  for (const [parentId, children] of childrenMap.entries()) {
+    if (!children.length) continue;
+    const sortedChildren = [...children].sort((a, b) => {
+      const aRoute = parseRouteOption(a.route);
+      const bRoute = parseRouteOption(b.route);
+
+      if (aRoute !== null && bRoute !== null && aRoute !== bRoute) {
+        return aRoute - bRoute;
+      }
+      if (aRoute !== null && bRoute === null) return -1;
+      if (aRoute === null && bRoute !== null) return 1;
+
+      const aIndex = insertionOrder.get(a.id) ?? 0;
+      const bIndex = insertionOrder.get(b.id) ?? 0;
+      return aIndex - bIndex;
+    });
+
+    childrenMap.set(parentId, sortedChildren);
+  }
+
   const positions = new Map();
 
   if (roots.length === 1) {
     assignPositions(roots[0].id, 0, 0, childrenMap, positions);
-  } else {
+  } else if (roots.length > 1) {
     // Multiple roots side by side
-    let curX = 0;
+    const rootWidths = roots.map(root => subtreeWidth(root.id, childrenMap));
+    const totalWidth = rootWidths.reduce((sum, w) => sum + w, 0) + H_GAP * 2 * (roots.length - 1);
+    let curX = -totalWidth / 2;
+
     for (const root of roots) {
       const w = subtreeWidth(root.id, childrenMap);
       assignPositions(root.id, curX + w / 2, 0, childrenMap, positions);
@@ -58,23 +92,42 @@ export function buildLayout(contacts) {
     }
   }
 
-  const nodes = contacts.map(c => {
+  const siblingOrderMap = new Map();
+  for (const [parentId, children] of childrenMap.entries()) {
+    if (!children.length) continue;
+
+    const sortedChildren = [...children].sort((a, b) => {
+      const aPos = positions.get(a.id)?.x ?? 0;
+      const bPos = positions.get(b.id)?.x ?? 0;
+      return aPos - bPos;
+    });
+
+    sortedChildren.forEach((child, index) => {
+      siblingOrderMap.set(child.id, index + 1);
+    });
+  }
+
+  const nodes = blocks.map(c => {
     const pos = positions.get(c.id) ?? { x: 0, y: 0 };
     return {
       id: c.id,
-      type: 'contact',
-      position: pos,
-      data: { contact: c },
+      type: 'block',
+      position: { x: pos.x - NODE_WIDTH / 2, y: pos.y },
+      data: {
+        block: c,
+        siblingRouteNumber: siblingOrderMap.get(c.id) ?? null,
+      },
     };
   });
 
-  const edges = contacts
+  const edges = blocks
     .filter(c => c.parentId !== null)
     .map(c => ({
       id: `e-${c.parentId}-${c.id}`,
       source: c.parentId,
       target: c.id,
-      type: 'smoothstep',
+      type: 'addChild',
+      label: '',
     }));
 
   return { nodes, edges };
