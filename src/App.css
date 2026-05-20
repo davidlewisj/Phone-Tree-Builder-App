@@ -1604,7 +1604,9 @@
   color: #ffffff;
   background: linear-gradient(135deg, var(--sms-bubble-start), var(--sms-bubble-end));
   border-radius: 22px 22px 8px 22px;
-  padding: 20px 20px 12px;
+  /* Remove padding-top so the editable fills the whole bubble */
+  padding: 0 0 12px;
+  cursor: text;
 }
 
 .sms-preview-card__bubble::after {
@@ -1618,10 +1620,14 @@
   clip-path: polygon(0 0, 0 100%, 100% 100%);
 }
 
+/* The editable span becomes a full-width block so the entire bubble is clickable */
 .sms-preview-card__editable {
   all: unset;
-  display: inline-block;
-  min-width: 1ch;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px 20px 8px;
+  min-height: 48px;
   color: inherit;
   font: inherit;
   font-size: 15px;
