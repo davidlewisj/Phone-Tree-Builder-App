@@ -8,7 +8,9 @@ export default function ContactNode({ data, selected }) {
       <Handle type="target" position={Position.Top} />
 
       <div className="contact-node__header">
-        <span className="contact-node__role">{contact.role || 'Contact'}</span>
+        {contact.blockType && (
+          <span className="contact-node__role">{contact.blockType}</span>
+        )}
         <div className="contact-node__actions">
           <button
             className="icon-btn"
@@ -29,7 +31,7 @@ export default function ContactNode({ data, selected }) {
       </div>
 
       <div className="contact-node__name">{contact.name}</div>
-      <div className="contact-node__phone">{contact.phone}</div>
+      {contact.phone && <div className="contact-node__phone">{contact.phone}</div>}
 
       <Handle type="source" position={Position.Bottom} />
     </div>
