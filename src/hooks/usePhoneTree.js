@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { createDefaultHoursSchedule } from '../utils/hoursSchedule';
 
 const STORAGE_KEY = 'phone-tree-blocks';
 const LEGACY_STORAGE_KEY = 'phone-tree-contacts';
@@ -115,18 +116,6 @@ function swapSiblingRoutes(nextBlocks, blockId, nextRoute) {
   occupyingSibling.route = formatRouteOption(fallbackOption);
 }
 
-function createDefaultHoursSchedule() {
-  return {
-    monday: { enabled: true, start: '09:00', end: '17:00' },
-    tuesday: { enabled: true, start: '09:00', end: '17:00' },
-    wednesday: { enabled: true, start: '09:00', end: '17:00' },
-    thursday: { enabled: true, start: '09:00', end: '17:00' },
-    friday: { enabled: true, start: '09:00', end: '17:00' },
-    saturday: { enabled: false, start: '09:00', end: '17:00' },
-    sunday: { enabled: false, start: '09:00', end: '17:00' },
-  };
-}
-
 const SAMPLE_DATA = [
   {
     id: '1',
@@ -134,7 +123,6 @@ const SAMPLE_DATA = [
     type: 'phone_tree',
     route: '',
     prompt: 'Thank you for calling. Press 1 for sales, 2 for support, or 0 for reception.',
-
     parentId: null,
   },
   {
@@ -145,7 +133,6 @@ const SAMPLE_DATA = [
     prompt: 'Play the initial greeting before presenting hours and routing options.',
     audioDataUrl: '',
     audioFileName: '',
-    notes: '',
     parentId: '1',
   },
   {
@@ -155,7 +142,6 @@ const SAMPLE_DATA = [
     route: 'Availability',
     prompt: 'Share phone hours and present the main call routing options.',
     hoursSchedule: createDefaultHoursSchedule(),
-    notes: '',
     parentId: '2',
   },
   {
@@ -164,7 +150,6 @@ const SAMPLE_DATA = [
     type: 'call_queue',
     route: 'Press 1',
     prompt: 'Queue callers for the sales team with hold music.',
-    notes: '',
     parentId: '3',
   },
   {
@@ -173,7 +158,6 @@ const SAMPLE_DATA = [
     type: 'call_group',
     route: 'Press 2',
     prompt: 'Ring Tier 1 support devices together for 20 seconds.',
-    notes: '',
     parentId: '3',
   },
   {
@@ -182,7 +166,6 @@ const SAMPLE_DATA = [
     type: 'device',
     route: 'Press 0',
     prompt: 'Send directly to reception desk extension 100.',
-    notes: '',
     parentId: '3',
   },
   {
@@ -191,7 +174,6 @@ const SAMPLE_DATA = [
     type: 'voicemail',
     route: 'No input / timeout',
     prompt: 'Send caller to general voicemail box.',
-    notes: '',
     parentId: '3',
   },
   {
@@ -200,7 +182,6 @@ const SAMPLE_DATA = [
     type: 'call_route',
     route: 'Billing Requests',
     prompt: 'Jump callers into the shared billing route.',
-    notes: '',
     parentId: '4',
   },
   {
@@ -209,7 +190,6 @@ const SAMPLE_DATA = [
     type: 'forwarding_number',
     route: 'After Hours',
     prompt: 'Forward to the external on-call number.',
-    notes: '',
     parentId: '4',
   },
   {
@@ -218,16 +198,19 @@ const SAMPLE_DATA = [
     type: 'play_message',
     route: 'Before Queue',
     prompt: 'Play a brief informational greeting before entering the sales queue.',
-    notes: '',
     parentId: '4',
   },
 ];
 
+const VALID_TYPES = new Set([
+  'phone_hours', 'phone_tree', 'call_queue', 'call_group',
+  'device', 'forwarding_number', 'call_route', 'voicemail', 'play_message',
+]);
+
 function inferType(entry) {
+  if (VALID_TYPES.has(entry.type)) return entry.type;
+
   const title = `${entry.title || entry.name || ''}`.toLowerCase();
-  if (entry.type === PHONE_HOURS_TYPE || entry.type === 'phone_tree' || entry.type === 'call_queue' || entry.type === 'call_group' || entry.type === 'device' || entry.type === 'forwarding_number' || entry.type === 'call_route' || entry.type === 'voicemail' || entry.type === 'play_message') {
-    return entry.type;
-  }
   if (title.includes('phone hours')) return PHONE_HOURS_TYPE;
   if (entry.parentId === null) return 'phone_tree';
   if (title.includes('phone tree') || title.includes('menu')) return 'phone_tree';
@@ -242,15 +225,11 @@ function inferType(entry) {
 }
 
 function normalizeStep(entry) {
+  // Current block shape
   if ('title' in entry || 'prompt' in entry || 'route' in entry) {
-    const normalizedTitle =
-      entry.parentId === null
-        ? 'Incoming Caller'
-        : entry.title;
-
     return {
       ...entry,
-      title: normalizedTitle || 'Untitled Block',
+      title: entry.parentId === null ? 'Incoming Caller' : (entry.title || 'Untitled Block'),
       type: inferType(entry),
       prompt: entry.prompt || '',
       voicemailAutoTextTemplate: entry.voicemailAutoTextTemplate || '',
@@ -258,19 +237,15 @@ function normalizeStep(entry) {
       audioDataUrl: entry.audioDataUrl || '',
       audioFileName: entry.audioFileName || '',
       hoursSchedule: entry.hoursSchedule || null,
-
       position: entry.position ?? null,
       parentId: entry.parentId ?? null,
     };
   }
 
-  const legacyTitle = entry.parentId === null && (entry.name === 'Alice Johnson' || entry.name === 'Incoming Call')
-    ? 'Incoming Caller'
-    : entry.name;
-
+  // Legacy contact shape (name/role/phone fields)
   return {
     id: entry.id,
-    title: legacyTitle || 'Untitled Block',
+    title: entry.parentId === null ? 'Incoming Caller' : (entry.name || 'Untitled Block'),
     type: inferType(entry),
     prompt: entry.role || '',
     voicemailAutoTextTemplate: '',
@@ -278,7 +253,6 @@ function normalizeStep(entry) {
     audioDataUrl: '',
     audioFileName: '',
     hoursSchedule: null,
-    notes: '',
     position: null,
     parentId: entry.parentId ?? null,
   };
@@ -292,7 +266,6 @@ function createPhoneHoursBlock(parentId) {
     route: 'Availability',
     prompt: 'Share phone hours and present the main call routing options.',
     hoursSchedule: createDefaultHoursSchedule(),
-    notes: '',
     position: null,
     parentId,
   };
@@ -307,7 +280,6 @@ function createGreetingMessageBlock(parentId) {
     prompt: 'Play the initial greeting before presenting hours and routing options.',
     audioDataUrl: '',
     audioFileName: '',
-    notes: '',
     position: null,
     parentId,
   };
@@ -368,16 +340,12 @@ function isProtectedScaffoldBlock(target, blocks) {
 }
 
 function ensureMasterFlowStructure(blocks) {
-  if (!Array.isArray(blocks) || blocks.length === 0) {
-    return blocks;
-  }
+  if (!Array.isArray(blocks) || blocks.length === 0) return blocks;
 
   const nextBlocks = blocks.map(block => ({ ...block }));
   const rootBlock = nextBlocks.find(block => block.parentId === null);
 
-  if (!rootBlock) {
-    return nextBlocks;
-  }
+  if (!rootBlock) return nextBlocks;
 
   rootBlock.title = 'Incoming Caller';
   rootBlock.route = '';
@@ -395,7 +363,6 @@ function ensureMasterFlowStructure(blocks) {
       prompt: 'Play the initial greeting before presenting hours and routing options.',
       audioDataUrl: '',
       audioFileName: '',
-      notes: '',
       position: null,
       parentId: rootBlock.id,
     };
@@ -403,7 +370,8 @@ function ensureMasterFlowStructure(blocks) {
   }
 
   let phoneHoursBlock = nextBlocks.find(
-    block => block.parentId === playMessageBlock.id && (block.type === PHONE_HOURS_TYPE || block.title?.toLowerCase() === 'phone hours')
+    block => block.parentId === playMessageBlock.id &&
+      (block.type === PHONE_HOURS_TYPE || block.title?.toLowerCase() === 'phone hours')
   );
 
   if (!phoneHoursBlock) {
@@ -416,9 +384,11 @@ function ensureMasterFlowStructure(blocks) {
   }
 
   nextBlocks.forEach(block => {
-    if (block.id === rootBlock.id || block.id === playMessageBlock.id || block.id === phoneHoursBlock.id) {
-      return;
-    }
+    if (
+      block.id === rootBlock.id ||
+      block.id === playMessageBlock.id ||
+      block.id === phoneHoursBlock.id
+    ) return;
 
     if (block.parentId === rootBlock.id || block.parentId === playMessageBlock.id) {
       block.parentId = phoneHoursBlock.id;
@@ -456,7 +426,6 @@ export function usePhoneTree() {
       audioDataUrl: audioDataUrl || '',
       audioFileName: audioFileName || '',
       hoursSchedule: hoursSchedule || null,
-
       position: position ?? null,
       parentId: parentId ?? null,
     };
@@ -467,11 +436,7 @@ export function usePhoneTree() {
         assignDefaultRouteForBlock(next, newBlock.id);
       }
 
-      const shouldEnsureScaffold =
-        newBlock.type === 'phone_tree' &&
-        newBlock.parentId !== null;
-
-      if (shouldEnsureScaffold) {
+      if (newBlock.type === 'phone_tree' && newBlock.parentId !== null) {
         ensurePhoneTreeScaffold(next, newBlock.id);
       }
 
@@ -509,25 +474,20 @@ export function usePhoneTree() {
       const updated = mapped.find(block => block.id === id);
       if (!updated) return mapped;
 
-      const shouldEnsureScaffold =
-        updated.type === 'phone_tree' &&
-        updated.parentId !== null;
+      if (updated.type === 'phone_tree' && updated.parentId !== null) {
+        const next = [...mapped];
+        ensurePhoneTreeScaffold(next, updated.id);
+        return next;
+      }
 
-      if (!shouldEnsureScaffold) return mapped;
-
-      const next = [...mapped];
-      ensurePhoneTreeScaffold(next, updated.id);
-      return next;
+      return mapped;
     });
   }, []);
 
   const removeBlock = useCallback(id => {
-    // Also remove all descendants
     setBlocks(prev => {
       const target = prev.find(block => block.id === id);
-      if (isProtectedScaffoldBlock(target, prev)) {
-        return prev;
-      }
+      if (isProtectedScaffoldBlock(target, prev)) return prev;
 
       const toRemove = new Set();
       const queue = [id];
@@ -540,13 +500,5 @@ export function usePhoneTree() {
     });
   }, []);
 
-  const getChildBlocks = useCallback(parentId => {
-    return blocks.filter(c => c.parentId === parentId);
-  }, [blocks]);
-
-  const getRootBlocks = useCallback(() => {
-    return blocks.filter(c => c.parentId === null);
-  }, [blocks]);
-
-  return { blocks, setBlocks, addBlock, updateBlock, removeBlock, getChildBlocks, getRootBlocks };
+  return { blocks, setBlocks, addBlock, updateBlock, removeBlock };
 }
