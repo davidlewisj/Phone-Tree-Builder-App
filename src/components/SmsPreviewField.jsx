@@ -9,26 +9,27 @@ export default function SmsPreviewField({ value, onChange }) {
   const messageText = value || '';
   const charCount = messageText.length;
 
-  // Only sync innerText from props when the change came from outside
-  // (e.g. loading saved data, switching blocks) — never while the user is typing.
+  // Sync DOM from props only when the value changes externally
+  // (e.g. switching selected block). Never during active typing.
   useEffect(() => {
     if (!editableRef.current) return;
     if (isInternalChange.current) {
       isInternalChange.current = false;
       return;
     }
-    if (editableRef.current.innerText !== messageText) {
+    const current = editableRef.current.innerText;
+    if (current !== messageText) {
       editableRef.current.innerText = messageText;
     }
   }, [messageText]);
 
   function handleInput(event) {
     isInternalChange.current = true;
-    const nextText = event.currentTarget.innerText.replace(/\r?\n/g, ' ');
-    if (nextText !== event.currentTarget.innerText) {
-      event.currentTarget.innerText = nextText;
-    }
-    onChange(nextText);
+    // plaintext-only contentEditable already strips HTML & newlines on modern browsers.
+    // Fall back to manual strip for older browsers.
+    const raw = event.currentTarget.innerText ?? '';
+    const next = raw.replace(/[\r\n]+/g, ' ');
+    onChange(next);
   }
 
   function handleKeyDown(event) {
@@ -38,24 +39,24 @@ export default function SmsPreviewField({ value, onChange }) {
   }
 
   function handleBlur(event) {
-    if (!event.currentTarget.innerText.trim()) {
+    const text = event.currentTarget.innerText?.trim() ?? '';
+    if (!text) {
       event.currentTarget.innerText = '';
       onChange('');
     }
   }
 
-  function focusEditableAtEnd() {
+  function handleClick() {
     if (!editableRef.current) return;
-    const editable = editableRef.current;
-    editable.focus();
-
-    const selection = window.getSelection();
-    if (!selection) return;
+    editableRef.current.focus();
+    // Move caret to end
+    const sel = window.getSelection();
+    if (!sel) return;
     const range = document.createRange();
-    range.selectNodeContents(editable);
+    range.selectNodeContents(editableRef.current);
     range.collapse(false);
-    selection.removeAllRanges();
-    selection.addRange(range);
+    sel.removeAllRanges();
+    sel.addRange(range);
   }
 
   return (
@@ -64,12 +65,12 @@ export default function SmsPreviewField({ value, onChange }) {
         className="sms-preview-card__bubble"
         role="group"
         aria-label="SMS preview"
-        onClick={focusEditableAtEnd}
+        onClick={handleClick}
       >
         <span
           ref={editableRef}
           className="sms-preview-card__editable"
-          contentEditable="true"
+          contentEditable="plaintext-only"
           suppressContentEditableWarning
           spellCheck="true"
           data-placeholder={PLACEHOLDER}
