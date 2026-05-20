@@ -7,12 +7,12 @@ function genId() {
 }
 
 const SAMPLE_DATA = [
-  { id: '1', name: 'Alice Johnson', phone: '555-0100', role: 'Director', parentId: null },
-  { id: '2', name: 'Bob Smith', phone: '555-0101', role: 'Manager', parentId: '1' },
-  { id: '3', name: 'Carol White', phone: '555-0102', role: 'Manager', parentId: '1' },
-  { id: '4', name: 'Dave Brown', phone: '555-0103', role: 'Staff', parentId: '2' },
-  { id: '5', name: 'Eve Davis', phone: '555-0104', role: 'Staff', parentId: '2' },
-  { id: '6', name: 'Frank Lee', phone: '555-0105', role: 'Staff', parentId: '3' },
+  { id: '1', name: 'Front Desk',    phone: '555-0100', role: 'Director', blockType: 'Main Line',   parentId: null },
+  { id: '2', name: 'Sleep Lab',     phone: '555-0101', role: 'Manager',  blockType: 'Department',  parentId: '1' },
+  { id: '3', name: 'Billing Dept',  phone: '555-0102', role: 'Manager',  blockType: 'Department',  parentId: '1' },
+  { id: '4', name: 'Check-In Desk', phone: '555-0103', role: 'Staff',    blockType: 'Reception',   parentId: '2' },
+  { id: '5', name: 'General VM',    phone: '',         role: 'Staff',    blockType: 'Voicemail',   parentId: '2' },
+  { id: '6', name: 'On-Call Line',  phone: '555-0199', role: 'Staff',    blockType: 'After Hours', parentId: '1' },
 ];
 
 export function usePhoneTree() {
@@ -29,18 +29,36 @@ export function usePhoneTree() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
   }, [contacts]);
 
-  function addContact({ name, phone, role, parentId }) {
-    const newContact = { id: genId(), name, phone, role, parentId: parentId ?? null };
+  function addContact({ name, phone, role, blockType, parentId }) {
+    const newContact = {
+      id: genId(),
+      name,
+      phone: phone ?? '',
+      role: role ?? '',
+      blockType: blockType ?? '',
+      parentId: parentId ?? null,
+    };
     setContacts(prev => [...prev, newContact]);
     return newContact;
   }
 
   function updateContact(id, updates) {
-    setContacts(prev => prev.map(c => (c.id === id ? { ...c, ...updates } : c)));
+    setContacts(prev =>
+      prev.map(c =>
+        c.id === id
+          ? {
+              ...c,
+              name: updates.name ?? c.name,
+              phone: updates.phone ?? c.phone,
+              role: updates.role ?? c.role,
+              blockType: updates.blockType !== undefined ? updates.blockType : c.blockType,
+            }
+          : c
+      )
+    );
   }
 
   function removeContact(id) {
-    // Also remove all descendants
     setContacts(prev => {
       const toRemove = new Set();
       const queue = [id];
