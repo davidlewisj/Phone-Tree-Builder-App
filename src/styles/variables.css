@@ -1,16 +1,59 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@500;600;700&display=swap');
 
 :root {
-  /* Colors */
+  /* Background */
   --bg-0: #ecf4ff;
   --bg-1: #f8fbff;
+
+  /* Ink */
   --ink: #1f2a44;
   --ink-soft: #5f6f93;
-  --line: #d2deef;
+  --ink-deep: #1b2b4a;
+  --ink-mid: #2a3f65;
+  --ink-muted: #4a628f;
+  --ink-faint: #5f7298;
+
+  /* Surfaces */
   --surface: rgba(255, 255, 255, 0.9);
   --surface-strong: #ffffff;
+  --surface-form: linear-gradient(180deg, rgba(247, 250, 255, 0.95), rgba(238, 244, 255, 0.9));
+  --surface-inspector: linear-gradient(180deg, #f7faff 0%, #eef4ff 100%);
+
+  /* Brand */
   --brand: #1266f1;
   --brand-strong: #0e4db8;
+  --brand-navy: #1e3a5f;
+  --brand-deep: #0f4aa6;
+
+  /* Borders */
+  --line: #d2deef;
+  --border-subtle: rgba(30, 58, 95, 0.16);
+  --border-faint: rgba(30, 58, 95, 0.11);
+  --border-strong: rgba(30, 58, 95, 0.14);
+  --border-inner: rgba(15, 23, 42, 0.08);
+  --border-card: rgba(15, 23, 42, 0.12);
+
+  /* Node type colors */
+  --type-phone-bg: #d9e9ff;
+  --type-phone-ink: #0f4aa6;
+  --type-queue-bg: #ffebd9;
+  --type-queue-ink: #9a4a00;
+  --type-group-bg: #dbf8ef;
+  --type-group-ink: #0a6f4d;
+  --type-device-bg: #e9e6ff;
+  --type-device-ink: #4d3fb4;
+  --type-fwd-bg: #ffe7c9;
+  --type-fwd-ink: #8f4800;
+  --type-route-bg: #e3f2ff;
+  --type-route-ink: #155e9b;
+  --type-voicemail-bg: #ffe1e9;
+  --type-voicemail-ink: #9e2249;
+  --type-play-bg: #edf1f8;
+  --type-play-ink: #4a5d85;
+
+  /* SMS bubble */
+  --sms-bubble-start: #2563eb;
+  --sms-bubble-end: #3b82f6;
 
   /* Motion */
   --motion-fast: 120ms;
