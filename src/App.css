@@ -1637,6 +1637,15 @@
   pointer-events: auto;
   user-select: text;
   -webkit-user-select: text;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.sms-preview-card__editable:focus {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .sms-preview-card__editable:empty::before {
