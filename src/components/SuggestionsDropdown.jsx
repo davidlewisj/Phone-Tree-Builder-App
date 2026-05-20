@@ -1,20 +1,11 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 
 export default function SuggestionsDropdown({ suggestions, onSelect, icon, buttonClassName }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef();
   const rootRef = useRef();
 
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e) {
-      if (rootRef.current && !rootRef.current.contains(e.target)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
+
 
   return (
     <div ref={rootRef} className="suggestions-dropdown-root" style={{ position: 'relative', display: 'inline-block' }}>

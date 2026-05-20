@@ -46,12 +46,14 @@ export default function SmsPreviewField({ value, onChange }) {
     }
   }
 
+
   function handleClick() {
     if (!editableRef.current) return;
-    editableRef.current.focus();
-    // Move caret to end
-    const sel = window.getSelection();
-    if (!sel) return;
+    const editable = editableRef.current;
+    editable.focus();
+
+    const selection = window.getSelection();
+    if (!selection) return;
     const range = document.createRange();
     range.selectNodeContents(editableRef.current);
     range.collapse(false);
@@ -70,7 +72,7 @@ export default function SmsPreviewField({ value, onChange }) {
         <span
           ref={editableRef}
           className="sms-preview-card__editable"
-          contentEditable="plaintext-only"
+          contentEditable="true"
           suppressContentEditableWarning
           spellCheck="true"
           data-placeholder={PLACEHOLDER}
@@ -78,7 +80,20 @@ export default function SmsPreviewField({ value, onChange }) {
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           aria-label="SMS message template"
-        />
+          onClick={e => {
+            if (document.designMode === 'off' || document.body.contentEditable === 'inherit') {
+              // eslint-disable-next-line no-console
+              console.warn('Document is not editable.');
+            }
+            focusEditableAtEnd();
+          }}
+          style={{
+            userSelect: 'text',
+            WebkitUserSelect: 'text',
+            pointerEvents: 'auto',
+            background: 'rgba(255,255,0,0.08)'
+          }}
+        >Test edit me</span>
       </div>
 
       <div className="sms-preview-card__actions">
