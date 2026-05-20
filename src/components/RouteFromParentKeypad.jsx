@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useCallback } from 'react';
 
 const DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
@@ -16,15 +16,53 @@ export default function RouteFromParentKeypad({ value, onChange, disabled = fals
   const selectedRouteLabel = selectedDigit ? `Press ${selectedDigit}` : null;
   const clampedAvailableCount = Math.max(0, Math.min(9, availableCount));
   const [showTooltip, setShowTooltip] = useState(false);
+  // Track the last-pressed key so we can play the pop animation
+  const [poppingDigit, setPoppingDigit] = useState(null);
+  // Ref to the grid for keyboard navigation
+  const gridRef = useRef(null);
 
   function handleSelect(digit) {
     if (disabled) return;
     if (Number(digit) > clampedAvailableCount) return;
+    // Toggle off if already selected (deselect)
+    if (selectedDigit === digit) {
+      onChange('');
+      return;
+    }
+    setPoppingDigit(digit);
     onChange(`Press ${digit}`);
   }
 
+  // Clear pop state after animation completes
+  function handleAnimationEnd(digit) {
+    if (poppingDigit === digit) setPoppingDigit(null);
+  }
+
+  // Keyboard navigation across the 3×3 grid
+  const handleGridKeyDown = useCallback((e, index) => {
+    const cols = 3;
+    let nextIndex = null;
+    if (e.key === 'ArrowRight') nextIndex = index + 1;
+    else if (e.key === 'ArrowLeft') nextIndex = index - 1;
+    else if (e.key === 'ArrowDown') nextIndex = index + cols;
+    else if (e.key === 'ArrowUp') nextIndex = index - cols;
+    else return; // Let Enter/Space bubble naturally to the button
+
+    e.preventDefault();
+    if (nextIndex < 0 || nextIndex >= DIGITS.length) return;
+    const buttons = gridRef.current?.querySelectorAll('.route-keypad__key');
+    buttons?.[nextIndex]?.focus();
+  }, []);
+
   return (
-    <div className="route-keypad route-keypad--modern" role="group" aria-label="Route from parent options">
+    <div
+      className={[
+        'route-keypad route-keypad--modern',
+        disabled ? 'route-keypad--disabled' : '',
+      ].filter(Boolean).join(' ')}
+      role="group"
+      aria-label="Route from parent options"
+    >
 
       {/* ── Header ── */}
       <div className="route-keypad__header">
@@ -35,6 +73,9 @@ export default function RouteFromParentKeypad({ value, onChange, disabled = fals
             </svg>
           </span>
           <span className="route-keypad__title">Route From Parent</span>
+          {disabled && (
+            <span className="route-keypad__readonly-label" aria-label="Read-only">Read-only</span>
+          )}
         </div>
         <button
           type="button"
@@ -60,10 +101,11 @@ export default function RouteFromParentKeypad({ value, onChange, disabled = fals
       </div>
 
       {/* ── 3×3 Keypad ── */}
-      <div className="route-keypad__grid">
-        {DIGITS.map(digit => {
+      <div className="route-keypad__grid" ref={gridRef}>
+        {DIGITS.map((digit, index) => {
           const isSelected = selectedDigit === digit;
           const isOptionAvailable = Number(digit) <= clampedAvailableCount;
+          const isPopping = poppingDigit === digit;
           return (
             <button
               key={digit}
@@ -72,13 +114,20 @@ export default function RouteFromParentKeypad({ value, onChange, disabled = fals
                 'route-keypad__key',
                 isSelected ? 'route-keypad__key--selected' : '',
                 !isOptionAvailable || disabled ? 'route-keypad__key--locked' : '',
+                isPopping ? 'route-keypad__key--pop' : '',
               ].filter(Boolean).join(' ')}
               aria-label={`Route option ${digit}`}
               aria-pressed={isSelected}
               disabled={disabled || !isOptionAvailable}
               onClick={() => handleSelect(digit)}
+              onKeyDown={(e) => handleGridKeyDown(e, index)}
+              onAnimationEnd={() => handleAnimationEnd(digit)}
             >
               <span className="route-keypad__digit">{digit}</span>
+              {/* Availability dot: shown when key is available but not selected */}
+              {isOptionAvailable && !isSelected && (
+                <span className="route-keypad__avail-dot" aria-hidden="true" />
+              )}
             </button>
           );
         })}

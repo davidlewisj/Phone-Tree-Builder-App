@@ -1392,6 +1392,14 @@
    ROUTE FROM PARENT KEYPAD  —  redesigned
 ═══════════════════════════════════════════════════ */
 
+/* Pop animation fired when a key is first selected */
+@keyframes key-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.14); }
+  70%  { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
+
 .route-keypad.route-keypad--modern {
   position: relative;
   padding: 0;
@@ -1404,7 +1412,13 @@
     0 8px 28px rgba(18, 102, 241, 0.10),
     0 1.5px 6px rgba(30, 58, 95, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  transition: box-shadow 0.18s var(--ease-soft), border-color 0.18s var(--ease-soft);
+  transition: box-shadow 0.18s var(--ease-soft), border-color 0.18s var(--ease-soft), opacity 0.18s var(--ease-soft);
+}
+
+/* Whole-component disabled state */
+.route-keypad.route-keypad--disabled {
+  opacity: 0.52;
+  pointer-events: none;
 }
 
 /* Blue accent bar at the very top */
@@ -1463,6 +1477,19 @@
   text-shadow: none;
 }
 
+/* Read-only label shown next to title when disabled */
+.route-keypad__readonly-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  background: rgba(15, 23, 42, 0.07);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
 /* Info button (replaces plain span) */
 .route-keypad__info-btn {
   position: relative;
@@ -1491,14 +1518,18 @@
   outline-offset: 2px;
 }
 
+/* Tooltip: clamp to card so it never clips on narrow panels */
 .route-keypad__tooltip {
   position: absolute;
+  /* Align to right edge of button but clamp so it never goes off-screen left */
   right: 0;
-  top: calc(100% + 8px);
   left: auto;
+  top: calc(100% + 8px);
   transform: none;
-  min-width: 220px;
-  max-width: 260px;
+  min-width: 200px;
+  max-width: min(260px, calc(100vw - 24px));
+  /* Use max() to keep tooltip at least 12px from left viewport edge */
+  margin-right: max(0px, calc(12px - (100vw - 100%)));
   background: #1e293b;
   color: #f1f5f9;
   font-size: 0.78rem;
@@ -1545,8 +1576,10 @@
   font-weight: 700;
   color: #2c4a7c;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(18, 102, 241, 0.06), inset 0 1px 0 rgba(255,255,255,0.8);
   transition:
@@ -1559,6 +1592,12 @@
   outline: none;
   position: relative;
   overflow: hidden;
+}
+
+/* Focus ring for keyboard navigation */
+.route-keypad__key:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 .route-keypad__key:hover:not(:disabled) {
@@ -1597,6 +1636,11 @@
   color: #fff;
 }
 
+/* Pop animation class applied transiently on selection */
+.route-keypad__key--pop {
+  animation: key-pop 0.22s var(--ease-soft) forwards;
+}
+
 /* Locked / disabled state */
 .route-keypad__key--locked,
 .route-keypad__key:disabled {
@@ -1617,6 +1661,17 @@
   line-height: 1;
   letter-spacing: 0.01em;
   pointer-events: none;
+}
+
+/* Availability dot shown on unlocked, unselected keys */
+.route-keypad__avail-dot {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(18, 102, 241, 0.45);
+  pointer-events: none;
+  flex-shrink: 0;
 }
 
 /* ── Footer: selection badge + available count ── */
@@ -1663,6 +1718,13 @@
 /* ── Helpers ── */
 .route-keypad__helper {
   display: none; /* replaced by footer */
+}
+
+/* Reduced-motion overrides for keypad */
+@media (prefers-reduced-motion: reduce) {
+  .route-keypad__key--pop {
+    animation: none !important;
+  }
 }
 
 /* ─── rest of existing styles below ─── */
