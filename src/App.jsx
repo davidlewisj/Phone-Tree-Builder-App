@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useReducer, useState, useRef } from 'react';
 import { ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, useNodesState, useEdgesState, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { usePhoneTree } from './hooks/usePhoneTree';
+import { uiReducer, INITIAL_UI_STATE, UI_ACTIONS } from './hooks/useUIState';
 import { buildLayout } from './utils/layout';
 import { BLOCK_TYPE_OPTIONS } from './utils/blockTypes';
 import { validateFlow } from './utils/validation';
@@ -17,9 +18,8 @@ import SmsPreviewField from './components/SmsPreviewField';
 import CopyButton from './components/CopyButton';
 import HoursScheduleEditor from './components/HoursScheduleEditor';
 import RouteFromParentKeypad from './components/RouteFromParentKeypad';
-import './App.css';
-
 import SuggestionsDropdown from './components/SuggestionsDropdown';
+import './App.css';
 
 const NODE_TYPES = { block: BlockNode };
 const EDGE_TYPES = { addChild: AddChildEdge };
@@ -115,18 +115,14 @@ class ErrorBoundary extends React.Component {
 }
 
 function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks }) {
-  const [modal, setModal] = useState(null);
-  const [selectedId, setSelectedId] = useState(null);
+  const [ui, dispatch] = useReducer(uiReducer, INITIAL_UI_STATE);
+  const { modal, selectedId, searchQuery, showExportImport, catalogContext, previewDrop, draggingPaletteType } = ui;
+
   const [pendingBlockIds, setPendingBlockIds] = useState(() => new Set());
   const [draft, setDraft] = useState(null);
   const [saveStatus, setSaveStatus] = useState('saved');
   const [history, setHistory] = useState([JSON.stringify(blocks)]);
   const [historyIndex, setHistoryIndex] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showExportImport, setShowExportImport] = useState(false);
-  const [catalogContext, setCatalogContext] = useState(null);
-  const [draggingPaletteType, setDraggingPaletteType] = useState(null);
-  const [previewDrop, setPreviewDrop] = useState(null);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
     return Number.isFinite(stored) ? clampSidebarWidth(stored) : 280;
@@ -178,7 +174,6 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
   const blocksWithWarnings = useMemo(() => new Set(validation.warnings.map(w => w.id)), [validation]);
   const blocksWithErrors = useMemo(() => new Set(validation.errors.map(e => e.id)), [validation]);
 
-  // Filter blocks by search query
   const filteredBlocks = useMemo(() => {
     if (!searchQuery.trim()) return blocks;
     const q = searchQuery.toLowerCase();
@@ -189,7 +184,6 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
     );
   }, [blocks, searchQuery]);
 
-  // Track history snapshots on block changes (debounced)
   useEffect(() => {
     if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
 
@@ -208,11 +202,9 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
     };
   }, [blocks]);
 
-  const blocksForLayout = filteredBlocks;
-
   const { nodes: layoutNodes, edges: layoutEdges } = useMemo(
-    () => buildLayout(blocksForLayout),
-    [blocksForLayout]
+    () => buildLayout(filteredBlocks),
+    [filteredBlocks]
   );
 
   const enrichedEdges = useMemo(
@@ -235,7 +227,7 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
           draggingPaletteType,
           hasError: blocksWithErrors.has(n.id),
           hasWarning: blocksWithWarnings.has(n.id),
-          onEdit: block => setSelectedId(block.id),
+          onEdit: block => dispatch({ type: UI_ACTIONS.SELECT_BLOCK, payload: block.id }),
           onDelete: block => {
             if (isProtectedScaffoldBlock(block, blocks)) {
               window.alert('This scaffold block is required for the phone tree and cannot be deleted directly.');
@@ -243,70 +235,49 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
             }
             if (window.confirm(`Delete "${block.title}" and all downstream blocks?`)) {
               removeBlock(block.id);
-              if (selectedId === block.id) setSelectedId(null);
+              if (selectedId === block.id) dispatch({ type: UI_ACTIONS.RESET_SELECTION });
             }
           },
-          onAddChild: block => setCatalogContext({ mode: 'child', targetId: block.id }),
+          onAddChild: block => dispatch({ type: UI_ACTIONS.SET_CATALOG_CONTEXT, payload: { mode: 'child', targetId: block.id } }),
           onAddAbove: block => {
             if (block.parentId === null) return;
-            setCatalogContext({ mode: 'above', targetId: block.id });
+            dispatch({ type: UI_ACTIONS.SET_CATALOG_CONTEXT, payload: { mode: 'above', targetId: block.id } });
           },
           onNodeDragOver: (blockId, placement, draggedType) => {
             if (!draggedType) return;
-            setPreviewDrop(current => {
+            dispatch(current => {
+              const prev = current.previewDrop;
               if (
-                current &&
-                current.targetId === blockId &&
-                current.placement === placement &&
-                current.type === draggedType
-              ) {
-                return current;
-              }
-              return { targetId: blockId, placement, type: draggedType };
+                prev &&
+                prev.targetId === blockId &&
+                prev.placement === placement &&
+                prev.type === draggedType
+              ) return current;
+              return uiReducer(current, { type: UI_ACTIONS.SET_PREVIEW_DROP, payload: { targetId: blockId, placement, type: draggedType } });
             });
           },
           onNodeDragLeave: blockId => {
-            setPreviewDrop(current => (current?.targetId === blockId ? null : current));
+            dispatch(current => {
+              if (current.previewDrop?.targetId !== blockId) return current;
+              return uiReducer(current, { type: UI_ACTIONS.SET_PREVIEW_DROP, payload: null });
+            });
           },
           onNodeDropType: (block, placement, draggedType) => {
             if (!draggedType || !block?.id) return;
-
             if (placement === 'above' && block.parentId === null) return;
 
             let created = null;
             if (placement === 'above') {
-              const parentId = block.parentId;
-              created = addBlock({
-                title: '',
-                type: draggedType,
-                route: '',
-                prompt: '',
-
-                parentId,
-                position: null,
-              });
+              created = addBlock({ title: '', type: draggedType, route: '', prompt: '', parentId: block.parentId, position: null });
               updateBlock(block.id, { parentId: created.id });
             } else {
-              created = addBlock({
-                title: '',
-                type: draggedType,
-                route: '',
-                prompt: '',
-
-                parentId: block.id,
-                position: null,
-              });
+              created = addBlock({ title: '', type: draggedType, route: '', prompt: '', parentId: block.id, position: null });
             }
 
-            setPendingBlockIds(prev => {
-              const next = new Set(prev);
-              next.add(created.id);
-              return next;
-            });
-            setSelectedId(created.id);
-
-            setPreviewDrop(null);
-            setDraggingPaletteType(null);
+            setPendingBlockIds(prev => { const next = new Set(prev); next.add(created.id); return next; });
+            dispatch({ type: UI_ACTIONS.SELECT_BLOCK, payload: created.id });
+            dispatch({ type: UI_ACTIONS.SET_PREVIEW_DROP, payload: null });
+            dispatch({ type: UI_ACTIONS.SET_DRAGGING_PALETTE_TYPE, payload: null });
             setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 80);
           },
           onDuplicate: block => {
@@ -315,26 +286,20 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
               type: block.type,
               route: block.route,
               prompt: block.prompt,
-
               parentId: block.parentId,
               position: block.position ? { x: block.position.x + 60, y: block.position.y + 60 } : null,
             });
           },
         },
       })),
-    [layoutNodes, previewDrop, draggingPaletteType, removeBlock, selectedId, blocksWithErrors, blocksWithWarnings, addBlock, blocks, updateBlock, fitView]
+    [layoutNodes, previewDrop, draggingPaletteType, removeBlock, selectedId, blocksWithErrors, blocksWithWarnings, addBlock, blocks, updateBlock, fitView, dispatch]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(enrichedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(enrichedEdges);
 
-  useEffect(() => {
-    setNodes(enrichedNodes);
-  }, [enrichedNodes, setNodes]);
-
-  useEffect(() => {
-    setEdges(enrichedEdges);
-  }, [enrichedEdges, setEdges]);
+  useEffect(() => { setNodes(enrichedNodes); }, [enrichedNodes, setNodes]);
+  useEffect(() => { setEdges(enrichedEdges); }, [enrichedEdges, setEdges]);
 
   function handleSave(formData) {
     if (modal.mode === 'add') {
@@ -344,7 +309,7 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
         position: modal.initialPosition ?? null,
       });
     }
-    setModal(null);
+    dispatch({ type: UI_ACTIONS.CLOSE_MODAL });
     setTimeout(() => fitView({ padding: 0.2, duration: 400 }), 100);
   }
 
@@ -360,26 +325,17 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
       audioDataUrl: draft.audioDataUrl || '',
       audioFileName: draft.audioFileName || '',
       hoursSchedule: draft.hoursSchedule || null,
-
     });
 
-    setPendingBlockIds(prev => {
-      const next = new Set(prev);
-      next.delete(selectedBlock.id);
-      return next;
-    });
+    setPendingBlockIds(prev => { const next = new Set(prev); next.delete(selectedBlock.id); return next; });
     setSaveStatus('saved');
   }
 
   function cancelPendingBlock() {
     if (!selectedBlock || !isPendingSelected) return;
     removeBlock(selectedBlock.id);
-    setPendingBlockIds(prev => {
-      const next = new Set(prev);
-      next.delete(selectedBlock.id);
-      return next;
-    });
-    setSelectedId(null);
+    setPendingBlockIds(prev => { const next = new Set(prev); next.delete(selectedBlock.id); return next; });
+    dispatch({ type: UI_ACTIONS.RESET_SELECTION });
     setDraft(null);
   }
 
@@ -391,7 +347,7 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
 
     const selected = blocks.find(c => c.id === selectedId);
     if (!selected) {
-      setSelectedId(null);
+      dispatch({ type: UI_ACTIONS.RESET_SELECTION });
       setDraft(null);
       return;
     }
@@ -405,7 +361,6 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
       audioDataUrl: selected.audioDataUrl || '',
       audioFileName: selected.audioFileName || '',
       hoursSchedule: selected.hoursSchedule || createDefaultHoursSchedule(),
-
       parentId: selected.parentId,
     });
   }, [blocks, selectedId]);
@@ -427,18 +382,15 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
   const onDragStart = useCallback((event, blockType) => {
     event.dataTransfer.setData(DND_TYPE, blockType);
     event.dataTransfer.effectAllowed = 'move';
-    setDraggingPaletteType(blockType);
-  }, []);
+    dispatch({ type: UI_ACTIONS.SET_DRAGGING_PALETTE_TYPE, payload: blockType });
+  }, [dispatch]);
 
   const onDragOver = useCallback(event => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
-
     const overNode = event.target instanceof Element && event.target.closest('.block-node');
-    if (!overNode) {
-      setPreviewDrop(null);
-    }
-  }, []);
+    if (!overNode) dispatch({ type: UI_ACTIONS.SET_PREVIEW_DROP, payload: null });
+  }, [dispatch]);
 
   const onDrop = useCallback(
     event => {
@@ -447,31 +399,18 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
       if (!blockType) return;
 
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      const created = addBlock({
-        title: '',
-        type: blockType,
-        route: '',
-        prompt: '',
-
-        parentId: null,
-        position,
-      });
-      setPendingBlockIds(prev => {
-        const next = new Set(prev);
-        next.add(created.id);
-        return next;
-      });
-      setSelectedId(created.id);
-      setDraggingPaletteType(null);
-      setPreviewDrop(null);
+      const created = addBlock({ title: '', type: blockType, route: '', prompt: '', parentId: null, position });
+      setPendingBlockIds(prev => { const next = new Set(prev); next.add(created.id); return next; });
+      dispatch({ type: UI_ACTIONS.SELECT_BLOCK, payload: created.id });
+      dispatch({ type: UI_ACTIONS.SET_DRAGGING_PALETTE_TYPE, payload: null });
+      dispatch({ type: UI_ACTIONS.SET_PREVIEW_DROP, payload: null });
     },
-    [screenToFlowPosition, addBlock]
+    [screenToFlowPosition, addBlock, dispatch]
   );
 
   const onConnect = useCallback(
     connection => {
       if (!connection.source || !connection.target || connection.source === connection.target) return;
-
       const target = blocks.find(c => c.id === connection.target);
       updateBlock(connection.target, {
         parentId: connection.source,
@@ -483,30 +422,20 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
   );
 
   const onNodeClick = useCallback((_event, node) => {
-    setSelectedId(node.id);
-  }, []);
+    dispatch({ type: UI_ACTIONS.SELECT_BLOCK, payload: node.id });
+  }, [dispatch]);
 
   const onPaneClick = useCallback(() => {
-    setSelectedId(null);
-  }, []);
+    dispatch({ type: UI_ACTIONS.RESET_SELECTION });
+  }, [dispatch]);
 
-  // Keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(e) {
       if (e.ctrlKey || e.metaKey) {
-        if (e.key === 'z') {
-          e.preventDefault();
-          handleUndo();
-        } else if (e.key === 'y') {
-          e.preventDefault();
-          handleRedo();
-        } else if (e.key === 'd') {
-          e.preventDefault();
-          if (selectedId) duplicateBlock();
-        } else if (e.key === 'f') {
-          e.preventDefault();
-          document.querySelector('.search-input')?.focus();
-        }
+        if (e.key === 'z') { e.preventDefault(); handleUndo(); }
+        else if (e.key === 'y') { e.preventDefault(); handleRedo(); }
+        else if (e.key === 'd') { e.preventDefault(); if (selectedId) duplicateBlock(); }
+        else if (e.key === 'f') { e.preventDefault(); document.querySelector('.search-input')?.focus(); }
       } else if (e.key === 'Delete' && selectedId) {
         e.preventDefault();
         deleteSelected();
@@ -527,7 +456,6 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
       audioDataUrl: selectedBlock.audioDataUrl,
       audioFileName: selectedBlock.audioFileName,
       hoursSchedule: selectedBlock.hoursSchedule,
-
       parentId: selectedBlock.parentId,
       position: selectedBlock.position ? { x: selectedBlock.position.x + 60, y: selectedBlock.position.y + 60 } : null,
     });
@@ -536,29 +464,19 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
   function handleAudioUpload(event) {
     const file = event.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = e => {
       const content = e.target?.result;
       if (typeof content !== 'string') return;
-      setDraft(prev => ({
-        ...prev,
-        audioDataUrl: content,
-        audioFileName: file.name,
-      }));
+      setDraft(prev => ({ ...prev, audioDataUrl: content, audioFileName: file.name }));
     };
     reader.readAsDataURL(file);
   }
 
   function clearAudioFile() {
-    setDraft(prev => ({
-      ...prev,
-      audioDataUrl: '',
-      audioFileName: '',
-    }));
+    setDraft(prev => ({ ...prev, audioDataUrl: '', audioFileName: '' }));
   }
 
-  // Auto-save with debounce
   useEffect(() => {
     if (!selectedBlock || !draft || !draft.title.trim() || pendingBlockIds.has(selectedBlock.id)) return;
 
@@ -575,14 +493,11 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
         audioDataUrl: draft.audioDataUrl || '',
         audioFileName: draft.audioFileName || '',
         hoursSchedule: draft.hoursSchedule || null,
-
       });
       setSaveStatus('saved');
     }, 600);
 
-    return () => {
-      if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
-    };
+    return () => { if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current); };
   }, [draft, selectedBlock, isTriggerBlock, canEditRoute, updateBlock, pendingBlockIds]);
 
   function deleteSelected() {
@@ -593,12 +508,8 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
     }
     if (window.confirm(`Delete "${selectedBlock.title}" and all downstream blocks?`)) {
       removeBlock(selectedBlock.id);
-      setPendingBlockIds(prev => {
-        const next = new Set(prev);
-        next.delete(selectedBlock.id);
-        return next;
-      });
-      setSelectedId(null);
+      setPendingBlockIds(prev => { const next = new Set(prev); next.delete(selectedBlock.id); return next; });
+      dispatch({ type: UI_ACTIONS.RESET_SELECTION });
     }
   }
 
@@ -607,7 +518,7 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
 
     const targetBlock = blocks.find(c => c.id === catalogContext.targetId);
     if (!targetBlock) {
-      setCatalogContext(null);
+      dispatch({ type: UI_ACTIONS.SET_CATALOG_CONTEXT, payload: null });
       return;
     }
 
@@ -615,42 +526,18 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
 
     if (catalogContext.mode === 'above') {
       if (targetBlock.parentId === null) {
-        setCatalogContext(null);
+        dispatch({ type: UI_ACTIONS.SET_CATALOG_CONTEXT, payload: null });
         return;
       }
-
-      const parentId = targetBlock.parentId;
-      created = addBlock({
-        title: '',
-        type,
-        route: '',
-        prompt: '',
-
-        parentId,
-        position: null,
-      });
-
+      created = addBlock({ title: '', type, route: '', prompt: '', parentId: targetBlock.parentId, position: null });
       updateBlock(targetBlock.id, { parentId: created.id });
     } else {
-      const parentId = targetBlock.id;
-      created = addBlock({
-        title: '',
-        type,
-        route: '',
-        prompt: '',
-
-        parentId,
-        position: null,
-      });
+      created = addBlock({ title: '', type, route: '', prompt: '', parentId: targetBlock.id, position: null });
     }
 
-    setPendingBlockIds(prev => {
-      const next = new Set(prev);
-      next.add(created.id);
-      return next;
-    });
-    setCatalogContext(null);
-    setSelectedId(created.id);
+    setPendingBlockIds(prev => { const next = new Set(prev); next.add(created.id); return next; });
+    dispatch({ type: UI_ACTIONS.SET_CATALOG_CONTEXT, payload: null });
+    dispatch({ type: UI_ACTIONS.SELECT_BLOCK, payload: created.id });
     setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 80);
   }
 
@@ -662,7 +549,7 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
     const newIndex = historyIndex - 1;
     setHistoryIndex(newIndex);
     setBlocks(JSON.parse(history[newIndex]));
-    setSelectedId(null);
+    dispatch({ type: UI_ACTIONS.RESET_SELECTION });
     setPendingBlockIds(new Set());
   }
 
@@ -671,7 +558,7 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
     const newIndex = historyIndex + 1;
     setHistoryIndex(newIndex);
     setBlocks(JSON.parse(history[newIndex]));
-    setSelectedId(null);
+    dispatch({ type: UI_ACTIONS.RESET_SELECTION });
     setPendingBlockIds(new Set());
   }
 
@@ -706,25 +593,15 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
             className="search-input"
             placeholder="Search blocks (Ctrl+F)..."
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={e => dispatch({ type: UI_ACTIONS.SET_SEARCH, payload: e.target.value })}
           />
         </div>
         <div className="app-header__actions">
-          <button className="btn btn--ghost" title="Undo (Ctrl+Z)" onClick={handleUndo} disabled={!canUndo}>
-            ↶ Undo
-          </button>
-          <button className="btn btn--ghost" title="Redo (Ctrl+Y)" onClick={handleRedo} disabled={!canRedo}>
-            ↷ Redo
-          </button>
-          <button className="btn btn--ghost" onClick={() => fitView({ padding: 0.2, duration: 400 })}>
-            Fit Flow
-          </button>
-          <button className="btn btn--ghost" title="Export / Import" onClick={() => setShowExportImport(true)}>
-            📥 Import / Export
-          </button>
-          <button className="btn btn--primary" onClick={() => setModal({ mode: 'add', parentBlock: null })}>
-            + Add Starting Block
-          </button>
+          <button className="btn btn--ghost" title="Undo (Ctrl+Z)" onClick={handleUndo} disabled={!canUndo}>↶ Undo</button>
+          <button className="btn btn--ghost" title="Redo (Ctrl+Y)" onClick={handleRedo} disabled={!canRedo}>↷ Redo</button>
+          <button className="btn btn--ghost" onClick={() => fitView({ padding: 0.2, duration: 400 })}>Fit Flow</button>
+          <button className="btn btn--ghost" title="Export / Import" onClick={() => dispatch({ type: UI_ACTIONS.TOGGLE_EXPORT_IMPORT })}>📥 Import / Export</button>
+          <button className="btn btn--primary" onClick={() => dispatch({ type: UI_ACTIONS.OPEN_ADD_MODAL, payload: { parentBlock: null } })}>+ Add Starting Block</button>
         </div>
       </header>
 
@@ -768,9 +645,7 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
                 <p>It stays fixed as <strong>Incoming Caller</strong> and acts as the starting label for everything below it.</p>
               </div>
             ) : (
-              <form
-                className="inspector-form"
-              >
+              <form className="inspector-form">
                 <label className="form-label">
                   <span>Block Label</span>
                   <input
@@ -901,7 +776,6 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
                   </div>
                 )}
 
-
                 {(isPlayMessageBlock || isVoicemailBlock) && (
                   <div className="inspector-special">
                     <span className="inspector-special__header">{isVoicemailBlock ? 'Voicemail Audio File' : 'Play Message Audio File'}</span>
@@ -920,9 +794,7 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
                       <audio className="audio-preview" controls src={draft.audioDataUrl} />
                     )}
                     {draft.audioDataUrl && (
-                      <button type="button" className="btn btn--ghost" onClick={clearAudioFile}>
-                        Remove Audio File
-                      </button>
+                      <button type="button" className="btn btn--ghost" onClick={clearAudioFile}>Remove Audio File</button>
                     )}
                   </div>
                 )}
@@ -947,18 +819,12 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
                 <div className="inspector-form__actions">
                   {isPendingSelected ? (
                     <>
-                      <button type="button" className="btn btn--secondary" onClick={cancelPendingBlock}>
-                        Cancel New Block
-                      </button>
-                      <button type="button" className="btn btn--primary" onClick={savePendingBlock} disabled={!isPendingDraftValid}>
-                        Save Block
-                      </button>
+                      <button type="button" className="btn btn--secondary" onClick={cancelPendingBlock}>Cancel New Block</button>
+                      <button type="button" className="btn btn--primary" onClick={savePendingBlock} disabled={!isPendingDraftValid}>Save Block</button>
                     </>
                   ) : (
                     <>
-                      <button type="button" className="btn btn--secondary" onClick={duplicateBlock} title="Ctrl+D">
-                        📋 Duplicate
-                      </button>
+                      <button type="button" className="btn btn--secondary" onClick={duplicateBlock} title="Ctrl+D">📋 Duplicate</button>
                       <button
                         type="button"
                         className="btn btn--danger"
@@ -975,8 +841,7 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
             )}
           </div>
 
-
-          <button className="btn btn--secondary" onClick={() => setModal({ mode: 'add', parentBlock: null })}>
+          <button className="btn btn--secondary" onClick={() => dispatch({ type: UI_ACTIONS.OPEN_ADD_MODAL, payload: { parentBlock: null } })}>
             Add Starting Block
           </button>
           <div className="palette">
@@ -989,8 +854,8 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
                   draggable
                   onDragStart={event => onDragStart(event, value)}
                   onDragEnd={() => {
-                    setDraggingPaletteType(null);
-                    setPreviewDrop(null);
+                    dispatch({ type: UI_ACTIONS.SET_DRAGGING_PALETTE_TYPE, payload: null });
+                    dispatch({ type: UI_ACTIONS.SET_PREVIEW_DROP, payload: null });
                   }}
                 >
                   <span className={`palette__item-icon block-node__type--${value}`} aria-hidden="true">
@@ -1015,7 +880,7 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
           {blocks.length === 0 ? (
             <div className="empty-state">
               <p className="empty-state__text">No call flow blocks yet.</p>
-              <button className="btn btn--primary" onClick={() => setModal({ mode: 'add', parentBlock: null })}>
+              <button className="btn btn--primary" onClick={() => dispatch({ type: UI_ACTIONS.OPEN_ADD_MODAL, payload: { parentBlock: null } })}>
                 Add your starting block
               </button>
             </div>
@@ -1051,15 +916,11 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
       {modal && (
         <BlockForm
           initial={modal.mode === 'edit' ? modal.block : null}
-          defaults={
-            modal.mode === 'add'
-              ? { type: modal.initialType || 'phone_tree' }
-              : null
-          }
+          defaults={modal.mode === 'add' ? { type: modal.initialType || 'phone_tree' } : null}
           dialogTitle={modal.dialogTitle}
           parentName={modal.parentBlock?.title}
           onSave={handleSave}
-          onCancel={() => setModal(null)}
+          onCancel={() => dispatch({ type: UI_ACTIONS.CLOSE_MODAL })}
         />
       )}
 
@@ -1068,11 +929,11 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
           blocks={blocks}
           onImport={imported => {
             setBlocks(imported);
-            setSelectedId(null);
-            setSearchQuery('');
+            dispatch({ type: UI_ACTIONS.RESET_SELECTION });
+            dispatch({ type: UI_ACTIONS.SET_SEARCH, payload: '' });
             setPendingBlockIds(new Set());
           }}
-          onCancel={() => setShowExportImport(false)}
+          onCancel={() => dispatch({ type: UI_ACTIONS.TOGGLE_EXPORT_IMPORT })}
         />
       )}
 
@@ -1081,7 +942,7 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
           parentTitle={blocks.find(c => c.id === catalogContext.targetId)?.title || 'Selected Block'}
           mode={catalogContext.mode}
           onSelect={handleCatalogSelect}
-          onCancel={() => setCatalogContext(null)}
+          onCancel={() => dispatch({ type: UI_ACTIONS.SET_CATALOG_CONTEXT, payload: null })}
         />
       )}
     </div>
