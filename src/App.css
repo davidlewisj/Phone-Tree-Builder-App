@@ -75,10 +75,11 @@
   background: #fff;
   border: 1.5px solid #d1d5db;
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 16px;
   width: 200px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   transition: box-shadow 0.15s, border-color 0.15s;
+  position: relative;
 }
 
 .contact-node:hover {
@@ -91,6 +92,35 @@
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
 }
 
+/* ── Accent bar ── */
+.contact-node__accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  border-radius: 10px 0 0 10px;
+}
+
+.contact-node--main-line   .contact-node__accent { background: #2563eb; }
+.contact-node--department  .contact-node__accent { background: #7c3aed; }
+.contact-node--reception   .contact-node__accent { background: #059669; }
+.contact-node--manager     .contact-node__accent { background: #d97706; }
+.contact-node--person      .contact-node__accent { background: #9ca3af; }
+.contact-node--extension   .contact-node__accent { background: #0284c7; }
+.contact-node--voicemail   .contact-node__accent { background: #db2777; }
+.contact-node--after-hours .contact-node__accent { background: #475569; }
+.contact-node--custom      .contact-node__accent { background: #ea580c; }
+
+/* ── After Hours dark card ── */
+.contact-node--after-hours {
+  background: #1e293b;
+  border-color: #334155;
+}
+.contact-node--after-hours .contact-node__name  { color: #f1f5f9; }
+.contact-node--after-hours .contact-node__phone { color: #94a3b8; }
+.contact-node--after-hours .icon-btn            { color: #64748b; }
+
 .contact-node__header {
   display: flex;
   align-items: center;
@@ -98,16 +128,34 @@
   margin-bottom: 6px;
 }
 
+/* ── Block type tag ── */
 .contact-node__role {
-  font-size: 0.7rem;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #6b7280;
-  background: #f3f4f6;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 4px;
+  white-space: nowrap;
 }
+
+.contact-node__role-icon {
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.type--main-line   { background: #dbeafe; color: #1d4ed8; }
+.type--department  { background: #ede9fe; color: #6d28d9; }
+.type--reception   { background: #d1fae5; color: #065f46; }
+.type--manager     { background: #fef3c7; color: #92400e; }
+.type--person      { background: #f3f4f6; color: #374151; }
+.type--extension   { background: #e0f2fe; color: #0369a1; }
+.type--voicemail   { background: #fce7f3; color: #9d174d; }
+.type--after-hours { background: #0f172a; color: #94a3b8; }
+.type--custom      { background: #fff7ed; color: #9a3412; }
 
 .contact-node__actions {
   display: flex;

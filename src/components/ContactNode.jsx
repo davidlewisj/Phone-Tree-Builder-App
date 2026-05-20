@@ -1,15 +1,21 @@
 import { Handle, Position } from '@xyflow/react';
+import { getBlockMeta } from '../constants/blockTypes';
 
 export default function ContactNode({ data, selected }) {
   const { contact, onEdit, onDelete, onAddChild } = data;
+  const meta = contact.blockType ? getBlockMeta(contact.blockType) : null;
 
   return (
-    <div className={`contact-node ${selected ? 'contact-node--selected' : ''}`}>
+    <div className={`contact-node ${meta ? `contact-node--${meta.cssKey}` : ''} ${selected ? 'contact-node--selected' : ''}`}>
+      {meta && <div className="contact-node__accent" />}
       <Handle type="target" position={Position.Top} />
 
       <div className="contact-node__header">
-        {contact.blockType && (
-          <span className="contact-node__role">{contact.blockType}</span>
+        {meta && (
+          <span className={`contact-node__role type--${meta.cssKey}`}>
+            <span className="contact-node__role-icon">{meta.icon}</span>
+            {contact.blockType}
+          </span>
         )}
         <div className="contact-node__actions">
           <button

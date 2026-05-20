@@ -1,16 +1,5 @@
 import { useState, useEffect } from 'react';
-
-const BLOCK_TYPES = [
-  'Main Line',
-  'Department',
-  'Reception',
-  'Manager',
-  'Person',
-  'Extension',
-  'Voicemail',
-  'After Hours',
-  'Custom',
-];
+import { BLOCK_TYPES, BLOCK_TYPE_META } from '../constants/blockTypes';
 
 const EMPTY = { name: '', phone: '', role: '', blockType: '' };
 
@@ -89,7 +78,7 @@ export default function ContactForm({ initial, parentName, onSave, onCancel }) {
             >
               <option value="">— Select a type —</option>
               {BLOCK_TYPES.map(t => (
-                <option key={t} value={t}>{t}</option>
+                <option key={t} value={t}>{BLOCK_TYPE_META[t].icon} {t}</option>
               ))}
             </select>
           </label>
