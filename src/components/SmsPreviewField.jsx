@@ -62,14 +62,14 @@ export default function SmsPreviewField({ value, onChange }) {
   }
 
   return (
+
     <div className="sms-preview-card">
       <div
         className="sms-preview-card__bubble"
         role="group"
         aria-label="SMS preview"
-        onClick={handleClick}
       >
-        <span
+        <div
           ref={editableRef}
           className="sms-preview-card__editable"
           contentEditable="true"
@@ -85,7 +85,7 @@ export default function SmsPreviewField({ value, onChange }) {
               // eslint-disable-next-line no-console
               console.warn('Document is not editable.');
             }
-            focusEditableAtEnd();
+            handleClick();
           }}
           style={{
             userSelect: 'text',
@@ -93,7 +93,8 @@ export default function SmsPreviewField({ value, onChange }) {
             pointerEvents: 'auto',
             background: 'rgba(255,255,0,0.08)'
           }}
-        >Test edit me</span>
+        >
+        </div>
       </div>
 
       <div className="sms-preview-card__actions">
