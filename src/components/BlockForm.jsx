@@ -2,9 +2,6 @@ import { useState, useEffect } from 'react';
 import { BLOCK_TYPE_OPTIONS, getBlockTypeDefinition } from '../utils/blockTypes';
 import BlockTypeIcon from './BlockTypeIcon';
 
-
-
-
 const EMPTY = { title: '', type: 'phone_tree', route: '', prompt: '' };
 
 export default function BlockForm({ initial, defaults, parentName, onSave, onCancel, dialogTitle }) {
@@ -17,10 +14,9 @@ export default function BlockForm({ initial, defaults, parentName, onSave, onCan
       initial
         ? {
             title: initial.title,
-          type: initial.type || 'phone_tree',
+            type: initial.type || 'phone_tree',
             route: initial.route,
             prompt: initial.prompt,
-            // notes: initial.notes || '',
           }
         : {
             ...EMPTY,
@@ -55,8 +51,7 @@ export default function BlockForm({ initial, defaults, parentName, onSave, onCan
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h2 className="modal__title">{title}</h2>
-        {/* Removed debug and duplicate Handling InstructionsSidebar */}
-            <form onSubmit={handleSubmit} className="block-form">
+        <form onSubmit={handleSubmit} className="block-form">
           <label className="form-label">
             Block Label *
             <input
@@ -111,7 +106,6 @@ export default function BlockForm({ initial, defaults, parentName, onSave, onCan
               placeholder={typeDefinition.promptPlaceholder}
             />
           </label>
-
           <div className="form-actions">
             <button type="button" className="btn btn--secondary" onClick={onCancel}>
               Cancel
