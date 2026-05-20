@@ -4,18 +4,26 @@ const PLACEHOLDER = 'Type your message here...';
 
 export default function SmsPreviewField({ value, onChange }) {
   const editableRef = useRef(null);
+  const isInternalChange = useRef(false);
 
   const messageText = value || '';
   const charCount = messageText.length;
 
+  // Only sync innerText from props when the change came from outside
+  // (e.g. loading saved data, switching blocks) — never while the user is typing.
   useEffect(() => {
     if (!editableRef.current) return;
+    if (isInternalChange.current) {
+      isInternalChange.current = false;
+      return;
+    }
     if (editableRef.current.innerText !== messageText) {
       editableRef.current.innerText = messageText;
     }
   }, [messageText]);
 
   function handleInput(event) {
+    isInternalChange.current = true;
     const nextText = event.currentTarget.innerText.replace(/\r?\n/g, ' ');
     if (nextText !== event.currentTarget.innerText) {
       event.currentTarget.innerText = nextText;
