@@ -569,6 +569,10 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
     voicemail: countByType(blocks, 'voicemail'),
   };
 
+  // Find the root (incoming) block
+  const rootBlock = blocks.find(b => b.parentId === null && b.type === 'phone_tree');
+  const hasStartingBlock = rootBlock && blocks.some(b => b.parentId === rootBlock.id);
+
   return (
     <div className="app">
       <header className="app-header">
@@ -597,11 +601,14 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
           />
         </div>
         <div className="app-header__actions">
+          <button className="btn btn--ghost" title="Reset Tree" onClick={() => { localStorage.clear(); window.location.reload(); }}>Reset Tree</button>
           <button className="btn btn--ghost" title="Undo (Ctrl+Z)" onClick={handleUndo} disabled={!canUndo}>↶ Undo</button>
           <button className="btn btn--ghost" title="Redo (Ctrl+Y)" onClick={handleRedo} disabled={!canRedo}>↷ Redo</button>
           <button className="btn btn--ghost" onClick={() => fitView({ padding: 0.2, duration: 400 })}>Fit Flow</button>
           <button className="btn btn--ghost" title="Export / Import" onClick={() => dispatch({ type: UI_ACTIONS.TOGGLE_EXPORT_IMPORT })}>📥 Import / Export</button>
-          <button className="btn btn--primary" onClick={() => dispatch({ type: UI_ACTIONS.OPEN_ADD_MODAL, payload: { parentBlock: null } })}>+ Add Starting Block</button>
+          {!hasStartingBlock && (
+            <button className="btn btn--primary" onClick={() => dispatch({ type: UI_ACTIONS.OPEN_ADD_MODAL, payload: { parentBlock: null } })}>+ Add Starting Block</button>
+          )}
         </div>
       </header>
 
@@ -841,9 +848,11 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
             )}
           </div>
 
-          <button className="btn btn--secondary" onClick={() => dispatch({ type: UI_ACTIONS.OPEN_ADD_MODAL, payload: { parentBlock: null } })}>
-            Add Starting Block
-          </button>
+          {!hasStartingBlock && (
+            <button className="btn btn--secondary" onClick={() => dispatch({ type: UI_ACTIONS.OPEN_ADD_MODAL, payload: { parentBlock: null } })}>
+              Add Starting Block
+            </button>
+          )}
           <div className="palette">
             <h3>Drag New Block</h3>
             <div className="palette__grid">
@@ -880,9 +889,11 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
           {blocks.length === 0 ? (
             <div className="empty-state">
               <p className="empty-state__text">No call flow blocks yet.</p>
-              <button className="btn btn--primary" onClick={() => dispatch({ type: UI_ACTIONS.OPEN_ADD_MODAL, payload: { parentBlock: null } })}>
-                Add your starting block
-              </button>
+              {!hasStartingBlock && (
+                <button className="btn btn--primary" onClick={() => dispatch({ type: UI_ACTIONS.OPEN_ADD_MODAL, payload: { parentBlock: null } })}>
+                  Add your starting block
+                </button>
+              )}
             </div>
           ) : (
             <ReactFlow
@@ -938,10 +949,28 @@ function PhoneTreeInner({ blocks, addBlock, updateBlock, removeBlock, setBlocks 
       )}
 
       {catalogContext && (
-        <BlockCatalogModal
-          parentTitle={blocks.find(c => c.id === catalogContext.targetId)?.title || 'Selected Block'}
-          mode={catalogContext.mode}
-          onSelect={handleCatalogSelect}
+        <BlockForm
+          initial={null}
+          defaults={{
+            parentId: catalogContext.mode === 'above'
+              ? blocks.find(c => c.id === catalogContext.targetId)?.parentId ?? null
+              : catalogContext.targetId,
+          }}
+          parentName={blocks.find(c => c.id === catalogContext.targetId)?.title || 'Selected Block'}
+          dialogTitle={catalogContext.mode === 'above' ? 'Insert Block Above' : 'Add Block Under'}
+          onSave={formData => {
+            let created = null;
+            if (catalogContext.mode === 'above') {
+              created = addBlock({ ...formData, parentId: blocks.find(c => c.id === catalogContext.targetId)?.parentId ?? null });
+              updateBlock(catalogContext.targetId, { parentId: created.id });
+            } else {
+              created = addBlock({ ...formData, parentId: catalogContext.targetId });
+            }
+            setPendingBlockIds(prev => { const next = new Set(prev); next.add(created.id); return next; });
+            dispatch({ type: UI_ACTIONS.SET_CATALOG_CONTEXT, payload: null });
+            dispatch({ type: UI_ACTIONS.SELECT_BLOCK, payload: created.id });
+            setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 80);
+          }}
           onCancel={() => dispatch({ type: UI_ACTIONS.SET_CATALOG_CONTEXT, payload: null })}
         />
       )}
