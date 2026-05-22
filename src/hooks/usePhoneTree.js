@@ -341,30 +341,73 @@ export function usePhoneTree() {
   }, [blocks]);
 
   const addBlock = useCallback(({ title, type, route, prompt, parentId, position, audioDataUrl, audioFileName, hoursSchedule, voicemailAutoTextTemplate }) => {
-    const newBlock = {
-      id: genId(),
-      title: parentId === null ? 'Incoming Caller' : title,
-      type: type || 'phone_tree',
-      route: parentId === null ? '' : route,
-      prompt,
-      voicemailAutoTextTemplate: voicemailAutoTextTemplate || '',
-      audioDataUrl: audioDataUrl || '',
-      audioFileName: audioFileName || '',
-      hoursSchedule: hoursSchedule || null,
-      position: position ?? null,
-      parentId: parentId ?? null,
-    };
+    // Prevent multiple root phone_tree blocks
+    if ((type === 'phone_tree' || !type) && (parentId === null || parentId === undefined)) {
+      // Only allow one root phone_tree block
+      if (typeof window !== 'undefined') {
+        const existing = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '[]');
+        if (existing.some(b => b.type === 'phone_tree' && b.parentId === null)) {
+          alert('Only one Incoming Caller block is allowed.');
+          return null;
+        }
+      }
+    }
+    let newBlock;
     setBlocks(prev => {
-      const next = [...prev, newBlock];
+      // Prevent duplicate root
+      if ((type === 'phone_tree' || !type) && (parentId === null || parentId === undefined) && prev.some(b => b.type === 'phone_tree' && b.parentId === null)) {
+        return prev;
+      }
+      let next = [...prev];
 
+      // If adding a non-root phone_tree, insert greeting and office hours before it
+      if ((type === 'phone_tree' || !type) && parentId !== null && parentId !== undefined) {
+        // Create greeting
+        const greeting = createGreetingMessageBlock(parentId);
+        next.push(greeting);
+        // Create office hours
+        const officeHours = createPhoneHoursBlock(greeting.id);
+        next.push(officeHours);
+        // Now create the new phone_tree block as a child of office hours
+        newBlock = {
+          id: genId(),
+          title,
+          type: 'phone_tree',
+          route,
+          prompt,
+          voicemailAutoTextTemplate: voicemailAutoTextTemplate || '',
+          audioDataUrl: audioDataUrl || '',
+          audioFileName: audioFileName || '',
+          hoursSchedule: hoursSchedule || null,
+          position: position ?? null,
+          parentId: officeHours.id,
+        };
+        next.push(newBlock);
+        assignDefaultRouteForBlock(next, newBlock.id);
+        return next;
+      }
+
+      // Default (root or non-phone_tree)
+      newBlock = {
+        id: genId(),
+        title: parentId === null ? 'Incoming Caller' : title,
+        type: type || 'phone_tree',
+        route: parentId === null ? '' : route,
+        prompt,
+        voicemailAutoTextTemplate: voicemailAutoTextTemplate || '',
+        audioDataUrl: audioDataUrl || '',
+        audioFileName: audioFileName || '',
+        hoursSchedule: hoursSchedule || null,
+        position: position ?? null,
+        parentId: parentId ?? null,
+      };
+      next.push(newBlock);
       if (newBlock.parentId !== null && newBlock.type !== PHONE_HOURS_TYPE) {
         assignDefaultRouteForBlock(next, newBlock.id);
       }
-
       if (newBlock.type === 'phone_tree' && newBlock.parentId !== null) {
         ensurePhoneTreeScaffold(next, newBlock.id);
       }
-
       return next;
     });
     return newBlock;
